@@ -1,0 +1,45 @@
+{
+  "name": "web",
+  "version": "1.2.2",
+  "author": "https://github.com/pedr0fontoura",
+  "private": true,
+  "homepage": "nui://",
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-select": "4.3.1",
+    "styled-components": "5.3.11"
+  },
+  "scripts": {
+    "start": "cross-env VITE_ENV=development vite",
+    "build": "cross-env VITE_ENV=production tsc && vite build",
+    "build-game": "cross-env VITE_ENV=game tsc && vite build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@types/react": "18.2.22",
+    "@types/react-dom": "18.2.7",
+    "typescript": "5.3.3",
+    "vite": "4.5.3",
+    "cross-env": "^7.0.3"
+  }
+}
