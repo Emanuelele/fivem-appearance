@@ -7,6 +7,7 @@ import {
   PED_COMPONENTS_IDS,
   PED_PROPS_IDS,
   EYE_COLORS,
+  blacklistMapper,
 } from './constants';
 
 import Customization, { getPedTattoos, setPedTattoos } from './modules/customization';
@@ -36,9 +37,13 @@ function getPedComponents(ped: number): PedComponent[] {
   const components = [];
 
   PED_COMPONENTS_IDS.forEach(componentId => {
+    const realDrawable = GetPedDrawableVariation(ped, componentId);
+    const blacklist = blacklistMapper.getComponentBlacklist(componentId);
+    const virtualDrawable = blacklistMapper.realToVirtual(realDrawable, blacklist);
+
     components.push({
       component_id: componentId,
-      drawable: GetPedDrawableVariation(ped, componentId),
+      drawable: virtualDrawable,
       texture: GetPedTextureVariation(ped, componentId),
     });
   });
@@ -50,9 +55,13 @@ function getPedProps(ped: number): PedProp[] {
   const props = [];
 
   PED_PROPS_IDS.forEach(propId => {
+    const realDrawable = GetPedPropIndex(ped, propId);
+    const blacklist = blacklistMapper.getPropBlacklist(propId);
+    const virtualDrawable = realDrawable === -1 ? -1 : blacklistMapper.realToVirtual(realDrawable, blacklist);
+
     props.push({
       prop_id: propId,
-      drawable: GetPedPropIndex(ped, propId),
+      drawable: virtualDrawable,
       texture: GetPedPropTextureIndex(ped, propId),
     });
   });
@@ -61,23 +70,12 @@ function getPedProps(ped: number): PedProp[] {
 }
 
 function getPedHeadBlend(ped: number): PedHeadBlend {
-  // int, int, int, int, int, int, float, float, float, bool
   const buffer = new ArrayBuffer(80);
 
   global.Citizen.invokeNative(GET_PED_HEAD_BLEND_DATA, ped, new Uint32Array(buffer));
 
-  /*   
-    0: shapeFirst,
-    2: shapeSecond,
-    4: shapeThird,
-    6: skinFirst,
-    8: skinSecond,
-    10: skinThird,
-    18: isParent,
-  */
   const { 0: shapeFirst, 2: shapeSecond, 6: skinFirst, 8: skinSecond } = new Uint32Array(buffer);
 
-  // 0: shapeMix, 2: skinMix, 4: thirdMix
   const { 0: shapeMix, 2: skinMix } = new Float32Array(buffer, 48);
 
   const normalizedShapeMix = parseFloat(shapeMix.toFixed(1));
@@ -105,17 +103,18 @@ function getPedFaceFeatures(ped: number): PedFaceFeatures {
 
 function getPedHeadOverlays(ped: number): PedHeadOverlays {
   const headOverlays = HEAD_OVERLAYS.reduce((object, overlay, index) => {
-    // success, value, colorType, firstColor, secondColor, opacity
     const [, value, , firstColor, , opacity] = GetPedHeadOverlayData(ped, index);
 
     const hasOverlay = value !== 255;
 
-    const safeValue = hasOverlay ? value : 0;
+    const realValue = hasOverlay ? value : 0;
+    const blacklist = blacklistMapper.getHeadOverlayBlacklist(overlay);
+    const virtualValue = blacklistMapper.realToVirtual(realValue, blacklist);
     const normalizedOpacity = hasOverlay ? parseFloat(opacity.toFixed(1)) : 0;
 
     return {
       ...object,
-      [overlay]: { style: safeValue, opacity: normalizedOpacity, color: firstColor },
+      [overlay]: { style: virtualValue, opacity: normalizedOpacity, color: firstColor },
     };
   }, {} as PedHeadOverlays);
 
@@ -123,8 +122,12 @@ function getPedHeadOverlays(ped: number): PedHeadOverlays {
 }
 
 function getPedHair(ped: number): PedHair {
+  const realStyle = GetPedDrawableVariation(ped, 2);
+  const blacklist = blacklistMapper.getHairBlacklist();
+  const virtualStyle = blacklistMapper.realToVirtual(realStyle, blacklist);
+
   return {
-    style: GetPedDrawableVariation(ped, 2),
+    style: virtualStyle,
     color: GetPedHairColor(ped),
     highlight: GetPedHairHighlightColor(ped),
   };
@@ -157,7 +160,9 @@ function getPedHairDecoration(ped: number, hairStyle: number): HairDecoration {
 }
 
 export function getPedAppearance(ped: number): PedAppearance {
-  const eyeColor = GetPedEyeColor(ped);
+  const realEyeColor = GetPedEyeColor(ped);
+  const blacklist = blacklistMapper.getEyeColorBlacklist();
+  const virtualEyeColor = blacklistMapper.realToVirtual(realEyeColor, blacklist);
 
   return {
     model: getPedModel(ped) || 'mp_m_freemode_01',
@@ -167,7 +172,7 @@ export function getPedAppearance(ped: number): PedAppearance {
     components: getPedComponents(ped),
     props: getPedProps(ped),
     hair: getPedHair(ped),
-    eyeColor: eyeColor < EYE_COLORS.length ? eyeColor : 0,
+    eyeColor: virtualEyeColor < EYE_COLORS.length ? virtualEyeColor : 0,
     tattoos: getPedTattoos(),
   };
 }
@@ -235,8 +240,10 @@ export function setPedHeadOverlays(ped: number, headOverlays: PedHeadOverlays): 
 
   HEAD_OVERLAYS.forEach((key, index) => {
     const headOverlay: PedHeadOverlayValue = headOverlays[key];
+    const blacklist = blacklistMapper.getHeadOverlayBlacklist(key);
+    const realStyle = blacklistMapper.virtualToReal(headOverlay.style, blacklist);
 
-    SetPedHeadOverlay(ped, index, headOverlay.style, headOverlay.opacity);
+    SetPedHeadOverlay(ped, index, realStyle, headOverlay.opacity);
 
     if (headOverlay.color || headOverlay.color === 0) {
       let colorType = 1;
@@ -259,13 +266,15 @@ export function setPedHair(ped: number, hair: PedHair): void {
   if (!hair) return;
 
   const { style, color, highlight } = hair;
+  const blacklist = blacklistMapper.getHairBlacklist();
+  const realStyle = blacklistMapper.virtualToReal(style, blacklist);
 
-  SetPedComponentVariation(ped, 2, style, 0, 0);
+  SetPedComponentVariation(ped, 2, realStyle, 0, 0);
 
   SetPedHairColor(ped, color, highlight);
 
   if (AUTOMATIC_FADE) {
-    const hairDecoration = getPedHairDecoration(ped, style);
+    const hairDecoration = getPedHairDecoration(ped, realStyle);
 
     ClearPedDecorations(ped);
 
@@ -278,9 +287,12 @@ export function setPedHair(ped: number, hair: PedHair): void {
 }
 
 export function setPedEyeColor(ped: number, eyeColor: number): void {
-  if (!eyeColor) return;
+  if (!eyeColor && eyeColor !== 0) return;
 
-  SetPedEyeColor(ped, eyeColor);
+  const blacklist = blacklistMapper.getEyeColorBlacklist();
+  const realEyeColor = blacklistMapper.virtualToReal(eyeColor, blacklist);
+
+  SetPedEyeColor(ped, realEyeColor);
 }
 
 export function setPedComponent(ped: number, component: PedComponent): void {
@@ -297,7 +309,10 @@ export function setPedComponent(ped: number, component: PedComponent): void {
     return;
   }
 
-  SetPedComponentVariation(ped, component_id, drawable, texture, 0);
+  const blacklist = blacklistMapper.getComponentBlacklist(component_id);
+  const realDrawable = blacklistMapper.virtualToReal(drawable, blacklist);
+
+  SetPedComponentVariation(ped, component_id, realDrawable, texture, 0);
 }
 
 export function setPedComponents(ped: number, components: PedComponent[]): void {
@@ -314,7 +329,10 @@ export function setPedProp(ped: number, prop: PedProp): void {
   if (drawable === -1) {
     ClearPedProp(ped, prop_id);
   } else {
-    SetPedPropIndex(ped, prop_id, drawable, texture, false);
+    const blacklist = blacklistMapper.getPropBlacklist(prop_id);
+    const realDrawable = blacklistMapper.virtualToReal(drawable, blacklist);
+
+    SetPedPropIndex(ped, prop_id, realDrawable, texture, false);
   }
 }
 
@@ -363,7 +381,7 @@ export async function setPlayerAppearance(appearance: PedAppearance): Promise<vo
     setPedHair(playerPed, hair);
   }
 
-  if (eyeColor) {
+  if (eyeColor || eyeColor === 0) {
     setPedEyeColor(playerPed, eyeColor);
   }
 
@@ -398,7 +416,7 @@ function setPedAppearance(ped: number, appearance: Omit<PedAppearance, 'model'>)
     setPedHair(ped, hair);
   }
 
-  if (eyeColor) {
+  if (eyeColor || eyeColor === 0) {
     setPedEyeColor(ped, eyeColor);
   }
 

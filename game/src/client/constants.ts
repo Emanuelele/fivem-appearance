@@ -40,7 +40,6 @@ export const HEAD_OVERLAYS = [
   'bodyBlemishes',
 ];
 
-// Thanks to rootcause for the eye colors names and hair decorations hashes.
 export const EYE_COLORS: string[] = [
   'Green',
   'Emerald',
@@ -255,3 +254,219 @@ export const DATA_CLOTHES: DataClothes = {
     },
   },
 };
+
+export interface BlacklistConfig {
+  enabled: boolean;
+  components: {
+    [componentId: number]: number[];
+  };
+  props: {
+    [propId: number]: number[];
+  };
+  hair: number[];
+  headOverlays: {
+    [overlayKey: string]: number[];
+  };
+  eyeColor: number[];
+  tattoos: {
+    [zone: string]: string[];
+  };
+  peds: string[];
+}
+
+export const BLACKLIST_CONFIG: BlacklistConfig = {
+  // ========================================
+  // ABILITA/DISABILITA BLACKLIST
+  // false = modalità normale (tutto disponibile)
+  // true = modalità restricted (applica i ban)
+  // ========================================
+  enabled: false,
+
+  // ========================================
+  // COMPONENTI (VESTITI)
+  // ========================================
+  components: {
+    1: [],   // Maschere (Masks)
+    3: [],   // Torso/Braccia (Torso)
+    4: [],   // Pantaloni (Legs)
+    5: [],   // Zaini/Borse (Bags)
+    6: [],   // Scarpe (Shoes)
+    7: [],   // Accessori Collo (Accessories - scarfs/chains)
+    8: [],   // Magliette Interne (Undershirt)
+    9: [],   // Giubbotti Antiproiettile (Body Armor)
+    10: [],  // Decalcomanie/Badge (Decals)
+    11: [],  // Giacche/Top (Jackets/Tops)
+  },
+
+  // ========================================
+  // PROPS (ACCESSORI)
+  // ========================================
+  props: {
+    0: [],   // Cappelli/Caschi (Hats/Helmets)
+    1: [],   // Occhiali (Glasses)
+    2: [],   // Orecchini (Ear accessories)
+    6: [],   // Orologi (Watches)
+    7: [],   // Braccialetti (Bracelets)
+  },
+
+  // ========================================
+  // CAPELLI
+  // ID degli stili di capelli da bannare
+  // ========================================
+  hair: [],
+
+  // ========================================
+  // HEAD OVERLAYS (SOVRAPPOSIZIONI VISO)
+  // ========================================
+  headOverlays: {
+    blemishes: [],          // Imperfezioni Pelle (Skin Blemishes)
+    beard: [],              // Barba (Beard)
+    eyebrows: [],           // Sopracciglia (Eyebrows)
+    ageing: [],             // Rughe/Invecchiamento (Ageing/Wrinkles)
+    makeUp: [],             // Trucco (Makeup)
+    blush: [],              // Fard (Blush)
+    complexion: [],         // Carnagione (Complexion)
+    sunDamage: [],          // Danni del Sole (Sun Damage)
+    lipstick: [],           // Rossetto (Lipstick)
+    moleAndFreckles: [],    // Nei e Lentiggini (Moles & Freckles)
+    chestHair: [],          // Peli del Petto (Chest Hair)
+    bodyBlemishes: [],      // Imperfezioni Corpo (Body Blemishes)
+  },
+
+  // ========================================
+  // COLORE OCCHI
+  // ID dei colori degli occhi da bannare (0-31)
+  // 0-8: Colori realistici
+  // 9-31: Colori fantastici/irrealistici
+  // ========================================
+  eyeColor: [],
+
+  // ========================================
+  // TATTOO
+  // Usa il NOME del tattoo, non un ID numerico
+  // Trova i nomi in tattoos.json
+  // Zone disponibili: ZONE_HEAD, ZONE_TORSO, ZONE_LEFT_ARM,
+  //                   ZONE_RIGHT_ARM, ZONE_LEFT_LEG, ZONE_RIGHT_LEG
+  // ========================================
+  tattoos: {},
+
+  // ========================================
+  // MODELLI PERSONAGGIO (PED)
+  // Usa il NOME del modello, non un ID numerico
+  // Esempi comuni:
+  // - 'mp_m_freemode_01' (maschio multiplayer)
+  // - 'mp_f_freemode_01' (femmina multiplayer)
+  // ========================================
+  peds: [],
+};
+
+export class BlacklistMapper {
+  private config: BlacklistConfig;
+
+  constructor(config: BlacklistConfig) {
+    this.config = config;
+  }
+
+  isEnabled(): boolean {
+    return this.config.enabled;
+  }
+
+  virtualToReal(value: number, blacklist: number[]): number {
+    if (!this.config.enabled || !blacklist || blacklist.length === 0) {
+      return value;
+    }
+
+    let realValue = value;
+    const sortedBlacklist = [...blacklist].sort((a, b) => a - b);
+
+    for (const banned of sortedBlacklist) {
+      if (banned <= realValue) {
+        realValue++;
+      } else {
+        break;
+      }
+    }
+
+    return realValue;
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.config.enabled = enabled;
+  }
+
+  realToVirtual(value: number, blacklist: number[]): number {
+    if (!this.config.enabled || !blacklist || blacklist.length === 0) {
+      return value;
+    }
+
+    const sortedBlacklist = [...blacklist].sort((a, b) => a - b);
+    let virtualValue = value;
+
+    for (const banned of sortedBlacklist) {
+      if (banned < value) {
+        virtualValue--;
+      } else {
+        break;
+      }
+    }
+
+    return virtualValue;
+  }
+
+  getFilteredMax(originalMax: number, blacklist: number[]): number {
+    if (!this.config.enabled || !blacklist || blacklist.length === 0) {
+      return originalMax;
+    }
+
+    const bannedInRange = blacklist.filter(b => b >= 0 && b <= originalMax).length;
+    return originalMax - bannedInRange;
+  }
+
+  getComponentBlacklist(componentId: number): number[] {
+    return this.config.components[componentId] || [];
+  }
+
+  getPropBlacklist(propId: number): number[] {
+    return this.config.props[propId] || [];
+  }
+
+  getHairBlacklist(): number[] {
+    return this.config.hair || [];
+  }
+
+  getHeadOverlayBlacklist(overlayKey: string): number[] {
+    return this.config.headOverlays[overlayKey] || [];
+  }
+
+  getEyeColorBlacklist(): number[] {
+    return this.config.eyeColor || [];
+  }
+
+  getTattooBlacklist(zone: string): string[] {
+    return this.config.tattoos[zone] || [];
+  }
+
+  getPedBlacklist(): string[] {
+    return this.config.peds || [];
+  }
+
+  filterPeds(peds: string[]): string[] {
+    if (!this.config.enabled) {
+      return peds;
+    }
+
+    const blacklist = this.getPedBlacklist();
+    return peds.filter(ped => !blacklist.includes(ped));
+  }
+
+  filterTattoos(tattoos: any[], zone: string): any[] {
+    if (!this.config.enabled) {
+      return tattoos;
+    }
+
+    const blacklist = this.getTattooBlacklist(zone);
+    return tattoos.filter(tattoo => !blacklist.includes(tattoo.name));
+  }
+}
+
+export const blacklistMapper = new BlacklistMapper(BLACKLIST_CONFIG);

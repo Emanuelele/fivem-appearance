@@ -5,6 +5,7 @@ import {
   HEAD_OVERLAYS,
   DEFAULT_CUSTOMIZATION_CONFIG,
   DATA_CLOTHES,
+  blacklistMapper,
 } from '../../constants';
 
 import { pedModels, getPedAppearance, setPlayerAppearance, totalTattoos } from '../../index';
@@ -13,7 +14,6 @@ import { arrayToVector3, isPedMale, Delay } from '../../utils';
 
 import { registerNuiCallbacks } from './nui';
 
-// Override native typing
 declare function OpenSequenceTask(): number;
 
 const exp = (global as any).exports;
@@ -87,12 +87,15 @@ export function getAppearance(): PedAppearance {
 
 export function getComponentSettings(ped: number, componentId: number): ComponentSettings {
   const drawableId = GetPedDrawableVariation(ped, componentId);
+  const originalMax = GetNumberOfPedDrawableVariations(ped, componentId) - 1;
+  const blacklist = blacklistMapper.getComponentBlacklist(componentId);
+  const filteredMax = blacklistMapper.getFilteredMax(originalMax, blacklist);
 
   const settings = {
     component_id: componentId,
     drawable: {
       min: 0,
-      max: GetNumberOfPedDrawableVariations(ped, componentId) - 1,
+      max: filteredMax,
     },
     texture: {
       min: 0,
@@ -105,12 +108,15 @@ export function getComponentSettings(ped: number, componentId: number): Componen
 
 export function getPropSettings(ped: number, propId: number): PropSettings {
   const drawableId = GetPedPropIndex(ped, propId);
+  const originalMax = GetNumberOfPedPropDrawableVariations(ped, propId) - 1;
+  const blacklist = blacklistMapper.getPropBlacklist(propId);
+  const filteredMax = blacklistMapper.getFilteredMax(originalMax, blacklist);
 
   const settings = {
     prop_id: propId,
     drawable: {
       min: -1,
-      max: GetNumberOfPedPropDrawableVariations(ped, propId) - 1,
+      max: filteredMax,
     },
     texture: {
       min: -1,
@@ -124,14 +130,21 @@ export function getPropSettings(ped: number, propId: number): PropSettings {
 export function getAppearanceSettings(): AppearanceSettings {
   const playerPed = PlayerPedId();
 
+  const filteredPedModels = blacklistMapper.filterPeds(pedModels);
+
   const ped: PedSettings = {
     model: {
-      items: pedModels,
+      items: filteredPedModels,
     },
   };
 
+  const filteredTotalTattoos: TattooList = {};
+  for (const zone in totalTattoos) {
+    filteredTotalTattoos[zone] = blacklistMapper.filterTattoos(totalTattoos[zone], zone);
+  }
+
   const tattoos: TattoosSettings = {
-    items: totalTattoos,
+    items: filteredTotalTattoos,
   };
 
   const components: ComponentSettings[] = PED_COMPONENTS_IDS.map(componentId =>
@@ -185,10 +198,14 @@ export function getAppearanceSettings(): AppearanceSettings {
   };
 
   const headOverlays: HeadOverlaysSettings = HEAD_OVERLAYS.reduce((object, headOverlay, index) => {
+    const originalMax = GetPedHeadOverlayNum(index) - 1;
+    const blacklist = blacklistMapper.getHeadOverlayBlacklist(headOverlay);
+    const filteredMax = blacklistMapper.getFilteredMax(originalMax, blacklist);
+
     const settings = {
       style: {
         min: 0,
-        max: GetPedHeadOverlayNum(index) - 1,
+        max: filteredMax,
       },
       opacity: {
         min: 0,
@@ -208,10 +225,14 @@ export function getAppearanceSettings(): AppearanceSettings {
     return { ...object, [headOverlay]: settings };
   }, {} as HeadOverlaysSettings);
 
+  const hairOriginalMax = GetNumberOfPedDrawableVariations(playerPed, 2) - 1;
+  const hairBlacklist = blacklistMapper.getHairBlacklist();
+  const hairFilteredMax = blacklistMapper.getFilteredMax(hairOriginalMax, hairBlacklist);
+
   const hair: HairSettings = {
     style: {
       min: 0,
-      max: GetNumberOfPedDrawableVariations(playerPed, 2) - 1,
+      max: hairFilteredMax,
     },
     color: {
       items: colors.hair,
@@ -221,9 +242,13 @@ export function getAppearanceSettings(): AppearanceSettings {
     },
   };
 
+  const eyeColorOriginalMax = 30;
+  const eyeColorBlacklist = blacklistMapper.getEyeColorBlacklist();
+  const eyeColorFilteredMax = blacklistMapper.getFilteredMax(eyeColorOriginalMax, eyeColorBlacklist);
+
   const eyeColor: EyeColorSettings = {
     min: 0,
-    max: 30,
+    max: eyeColorFilteredMax,
   };
 
   return {
@@ -425,7 +450,6 @@ export async function wearClothes(data: PedAppearance, typeClothes: string): Pro
       const [componentId] = male[i];
       for (let j = 0; j < components.length; j++) {
         const { component_id, drawable, texture } = components[j];
-        // eslint-disable-next-line prettier/prettier
         if (component_id === componentId) SetPedComponentVariation(playerPed, componentId, drawable, texture, 2);
       }
     }
@@ -434,7 +458,6 @@ export async function wearClothes(data: PedAppearance, typeClothes: string): Pro
       const [componentId] = female[i];
       for (let j = 0; j < components.length; j++) {
         const { component_id, drawable, texture } = components[j];
-        // eslint-disable-next-line prettier/prettier
         if (component_id === componentId) SetPedComponentVariation(playerPed, componentId, drawable, texture, 2);
       }
     }
@@ -531,6 +554,7 @@ function startPlayerCustomization(
   cb: (appearance?: PedAppearance) => void,
   _config = DEFAULT_CUSTOMIZATION_CONFIG,
 ): void {
+  blacklistMapper.setEnabled(config_.useBlacklist ?? true);
   const playerPed = PlayerPedId();
 
   playerAppearance = getPedAppearance(playerPed);
